@@ -3,7 +3,8 @@
 #include <PubSubClient.h>
 #include <U8g2lib.h>
 #include <Wire.h>
-
+#include "TimerHelper.h"
+#include "TaskTimer.h"
 U8G2_SSD1306_128X64_NONAME_F_HW_I2C oled(U8G2_R0, U8X8_PIN_NONE);
 
 const char* ssid = "HUAWEI-dreamland";
@@ -15,7 +16,7 @@ char mqtt_json[200]; //返回mqtt的json字符数组
 const int RELAY_SWITCH = D8;
 int flag = 0;
 int data[7];
-
+int led_val = 1;
 WiFiClient espClient;
 PubSubClient client(espClient);
 
@@ -88,37 +89,11 @@ void reconnect() {
   }
 }
 
-void setup() {
-  // pinMode(BUILTIN_LED, OUTPUT);     // Initialize the BUILTIN_LED pin as an output
-  // pinMode(D8, OUTPUT);
-  pinMode(2, OUTPUT);
-  pinMode(RELAY_SWITCH, OUTPUT);
-  // Serial.begin(9600);
-  Serial.begin(4800); //读取功率计的通信波特率，用TX0，RX0
-  setup_wifi();
-  client.setServer(mqtt_server, 1883);
-  client.setCallback(callback1);
-  oled.setI2CAddress(0x3C*2);
-  oled.begin();
-  oled.enableUTF8Print();
-}
-
 void blink(){
-  digitalWrite(2,HIGH);
-  delay(500);
-  digitalWrite(2,LOW);
-  delay(500);
+  digitalWrite(2,led_val);
+  led_val = !led_val;
 }
 
-void readModbus() {
-  Serial.write(modbus_querry, (sizeof(modbus_querry) / sizeof(modbus_querry[0])));
-  delay(500);
-  if (Serial.available()) {
-    modbus_data = Serial.readString();
-    Serial.println(modbus_data);
-    flag = 1;
-  }
-}
 
 // 将Modbus返回的16进制字符数组，转成10进制
 int char2int(String str, int left, int right) {
@@ -148,6 +123,18 @@ void resolve() {
   // 封装成JSON格式
   sprintf(mqtt_json, "{\"voltage\":%d,\"current\":%d,\"c_power\":%d,\"all_enegy\":%d,\"power_factor\":%d,\"coo\":%d,\"hz\":%d}", data[0], data[1], data[2], data[3], data[4], data[5], data[6]);
 }
+
+void readModbus() {
+  Serial.write(modbus_querry, (sizeof(modbus_querry) / sizeof(modbus_querry[0])));
+  delay(200);
+  if (Serial.available()) {
+    modbus_data = Serial.readString();
+    Serial.println(modbus_data);
+    flag = 1;
+  }
+  resolve();
+}
+
 void show_oled() {
   oled.setFont(u8g2_font_timR12_tf);
   oled.setFontPosTop();
@@ -165,16 +152,34 @@ void show_oled() {
   oled.print("W");
 }
 
+
+
+TimerHelper timerHelper(100);
+void setup() {
+ 
+  pinMode(2, OUTPUT);
+  pinMode(RELAY_SWITCH, OUTPUT);
+ 
+  Serial.begin(4800); //读取功率计的通信波特率，用TX0，RX0
+  setup_wifi();
+  client.setServer(mqtt_server, 1883);
+  client.setCallback(callback1);
+  oled.setI2CAddress(0x3C*2);
+  oled.begin();
+  oled.enableUTF8Print();
+  
+  timerHelper.add(TaskTimer(1,0,readModbus));
+  timerHelper.add(TaskTimer(1,0,blink));
+}
+
 void loop() {
 
   if (!client.connected()) {
     reconnect();
   }
   // Serial.println("111");
+  timerHelper.loop();
   client.loop();
-  blink();
-  readModbus();
-  resolve();
   delay(100);
   if(flag){
     client.publish("up_data",mqtt_json);
@@ -186,8 +191,8 @@ void loop() {
     show_oled();
   }while(oled.nextPage());
 
-  delay(2000);
-
+//   delay(2000);
+  
 }
 
 
