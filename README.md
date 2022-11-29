@@ -15,3 +15,5 @@
 （1）导入工程
 
 （2）将Nodemuc用usb线与电脑连接，点击烧写。
+
+（3）搭建后端服务器，详情见：https://github.com/zyss13/Electric_energy_detection-
